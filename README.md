@@ -2,11 +2,9 @@
 
 **Bulk-download and organize Outlook attachments without opening emails one by one.**
 
-OutlookAttachSnatcher is a VBA macro for **Classic Microsoft Outlook for Windows** that can download attachments from multiple emails in a single operation.
+OutlookAttachSnatcher is a VBA macro for **Classic Microsoft Outlook for Windows** that downloads attachments from multiple emails in one operation. Select messages manually, or search the current Outlook folder by sender name/email, subject and date range.
 
-You can either select emails manually or search the current Outlook folder using filters such as sender, email address, subject, and date range.
-
-The downloader includes progress tracking, duplicate protection, temporary-file safety, cancellation support, disk-space checking, and handling designed for large batches of emails and attachments.
+It includes progress tracking, duplicate protection, temporary-file safety, cancellation support, disk-space checking and large-batch-friendly processing.
 
 ---
 
@@ -21,111 +19,55 @@ The downloader includes progress tracking, duplicate protection, temporary-file 
 - 🗂️ Or create a separate folder for each email
 - 🔢 Automatically handles duplicate filenames
 - 🛡️ Never intentionally overwrites an existing file
-- ⏳ Live download progress
-- 📊 Shows current attachment / total attachments
-- 📈 Shows percentage completed
+- ⏳ Live download progress with attachment counter and percentage
 - 💾 Calculates total attachment size before starting
-- 🚨 Checks available disk space before downloading
+- 🚨 Checks available local disk space before downloading
 - 🧹 Cleans invalid Windows filename characters
 - 📏 Protects against excessively long Windows paths
 - 🗃️ Uses temporary `.downloading` files while saving
 - ❌ Failed attachments do not stop the entire batch
-- ⌨️ Press `ESC` to cancel a running operation
+- ⌨️ Press `ESC` to cancel at a safe point
 - ⚡ Uses cooperative UI yielding to keep Outlook responsive
-- 🧠 Avoids keeping large numbers of Outlook `MailItem` objects in memory
+- 🧠 Stores lightweight message IDs instead of keeping large numbers of `MailItem` objects in memory
 - 📦 Everything is contained in **one VBA module**
 - 🔧 No external libraries or additional software required
 
 ---
 
-# 🖥️ Requirements
+## 🖥️ Requirements
 
 - Windows
 - **Classic Microsoft Outlook for Windows**
 - VBA / Macros enabled
 
 > [!IMPORTANT]
-> OutlookAttachSnatcher does **not** work with the **New Outlook for Windows** because New Outlook does not support traditional Outlook VBA macros.
->
-> Switch to **Classic Outlook** before installing or running the macro.
+> OutlookAttachSnatcher does **not** work with **New Outlook for Windows** because New Outlook does not support traditional Outlook VBA macros. Switch to **Classic Outlook** before installing or running it.
 
 ---
 
-# 📦 Installation
+## 📦 Installation
 
-## 1. Open Classic Outlook
+### Option A — Import the module (recommended)
 
-If you are currently using New Outlook, switch back to:
+1. Download `OutlookAttachSnatcher.bas` from this repository.
+2. Open **Classic Outlook**.
+3. Press `ALT + F11` to open the VBA Editor.
+4. Choose **File → Import File...**.
+5. Select `OutlookAttachSnatcher.bas`.
+6. Press `CTRL + S` to save the Outlook VBA project.
+7. Close the VBA Editor.
 
-**Classic Outlook**
+### Option B — Copy and paste
 
----
-
-## 2. Open the VBA Editor
-
-Press:
-
-```text
-ALT + F11
-```
-
-The Microsoft Visual Basic for Applications editor will open.
-
----
-
-## 3. Create a Module
-
-In the VBA Editor select:
-
-```text
-Insert → Module
-```
-
-A new standard VBA module will appear.
+1. Open `OutlookAttachSnatcher.bas` on GitHub and copy its contents.
+2. In Classic Outlook press `ALT + F11`.
+3. Choose **Insert → Module**.
+4. Paste the code into the new standard module.
+5. Press `CTRL + S`.
 
 ---
 
-## 4. Add OutlookAttachSnatcher
-
-Open:
-
-```text
-OutlookAttachSnatcher.bas
-```
-
-Copy the complete source code and paste it into the new Outlook VBA module.
-
-Alternatively, if your VBA editor supports importing modules:
-
-```text
-File → Import File...
-```
-
-and select:
-
-```text
-OutlookAttachSnatcher.bas
-```
-
----
-
-## 5. Save
-
-Press:
-
-```text
-CTRL + S
-```
-
-Close the VBA Editor.
-
----
-
-# ▶️ Running OutlookAttachSnatcher
-
-There are two convenient ways to run it.
-
-## Method 1 — Keyboard
+## ▶️ Run OutlookAttachSnatcher
 
 Press:
 
@@ -136,157 +78,44 @@ ALT + F8
 Select:
 
 ```text
-OutlookBulkAttachmentDownloader
+OutlookAttachSnatcher
 ```
 
-and click:
-
-```text
-Run
-```
+and click **Run**.
 
 ---
 
-# 🔘 Add OutlookAttachSnatcher as a Button
+## 🔘 Add OutlookAttachSnatcher as an Outlook Button
 
-For regular use, adding the macro as an Outlook button is much faster than using `ALT + F8`.
+For regular use, add the macro to the **Quick Access Toolbar** or the Outlook **Ribbon**.
 
-## Option A — Quick Access Toolbar
+### Option A — Quick Access Toolbar
 
-In **Classic Outlook**:
+In Classic Outlook:
 
-1. Open:
+1. Open **File → Options → Quick Access Toolbar**.
+2. Set **Choose commands from:** to **Macros**.
+3. Find `OutlookAttachSnatcher`.
+4. Outlook may show a qualified name such as `Project1.Module1.OutlookAttachSnatcher`.
+5. Select it and click **Add >>**.
+6. Select the newly added macro on the right and click **Modify...**.
+7. Choose an icon and set the display name to `OutlookAttachSnatcher`.
+8. Click **OK**, then **OK** again.
 
-   ```text
-   File → Options
-   ```
+You can now launch the downloader from the Quick Access Toolbar.
 
-2. Select:
+### Option B — Outlook Ribbon
 
-   ```text
-   Quick Access Toolbar
-   ```
+1. Open **File → Options → Customize Ribbon**.
+2. On the right, select the **Home** tab.
+3. Click **New Group** and rename it `Attachments`.
+4. On the left, set **Choose commands from:** to **Macros**.
+5. Select `OutlookAttachSnatcher`.
+6. Click **Add >>**.
+7. Rename the displayed command to `OutlookAttachSnatcher` and choose an icon if desired.
+8. Click **OK**.
 
-3. In:
-
-   ```text
-   Choose commands from:
-   ```
-
-   select:
-
-   ```text
-   Macros
-   ```
-
-4. Find the macro:
-
-   ```text
-   OutlookBulkAttachmentDownloader
-   ```
-
-   Depending on your VBA project/module name, Outlook may display a longer name such as:
-
-   ```text
-   Project1.Module1.OutlookBulkAttachmentDownloader
-   ```
-
-5. Select the macro.
-
-6. Click:
-
-   ```text
-   Add >>
-   ```
-
-7. Select the newly added macro on the right.
-
-8. Click:
-
-   ```text
-   Modify...
-   ```
-
-9. Choose an icon.
-
-10. Change the display name to something friendly, for example:
-
-   ```text
-   OutlookAttachSnatcher
-   ```
-
-11. Click:
-
-   ```text
-   OK
-   ```
-
-12. Click:
-
-   ```text
-   OK
-   ```
-
-You now have a dedicated OutlookAttachSnatcher button in the Quick Access Toolbar.
-
----
-
-## Option B — Add it to the Outlook Ribbon
-
-You can also create a dedicated group in the Outlook Ribbon.
-
-Open:
-
-```text
-File → Options → Customize Ribbon
-```
-
-On the right side:
-
-1. Select the **Home** tab.
-2. Click **New Group**.
-3. Rename the group to:
-
-   ```text
-   Attachments
-   ```
-
-On the left side:
-
-4. Change:
-
-   ```text
-   Choose commands from:
-   ```
-
-   to:
-
-   ```text
-   Macros
-   ```
-
-5. Select:
-
-   ```text
-   OutlookBulkAttachmentDownloader
-   ```
-
-6. Click:
-
-   ```text
-   Add >>
-   ```
-
-7. Use **Rename** to change its displayed name to:
-
-   ```text
-   OutlookAttachSnatcher
-   ```
-
-8. Choose an icon if desired.
-9. Click **OK**.
-
-You can now launch the downloader directly from:
+You can then run it from:
 
 ```text
 Home → Attachments → OutlookAttachSnatcher
@@ -294,9 +123,9 @@ Home → Attachments → OutlookAttachSnatcher
 
 ---
 
-# 📥 Download Modes
+## 📥 Download Modes
 
-When OutlookAttachSnatcher starts, it asks:
+When the macro starts:
 
 ```text
 Choose how you want to process emails:
@@ -306,95 +135,53 @@ NO = Search current Outlook folder
 CANCEL = Exit
 ```
 
----
+### Selected emails
 
-## YES — Process Selected Emails
+Select multiple messages with `CTRL + Click` or `SHIFT + Click`, then run `OutlookAttachSnatcher`.
 
-Select multiple emails in Outlook using:
+### Search current folder
 
-```text
-CTRL + Click
-```
-
-or:
-
-```text
-SHIFT + Click
-```
-
-Then run OutlookAttachSnatcher.
-
-Only the selected emails will be processed.
-
-This is useful when you already know exactly which messages contain the attachments you need.
-
----
-
-## NO — Search Current Outlook Folder
-
-OutlookAttachSnatcher can search the currently open Outlook folder automatically.
-
-You can filter using:
+Choose **NO** and optionally filter by:
 
 - Sender name
 - Sender email address
-- Subject
+- Subject text
 - Start date
 - End date
 
+The search operates on the **currently open Outlook folder** and does not recursively search subfolders.
+
 ---
 
-# 🔎 Sender Search
+## 🔎 Sender Search
 
-The Sender field accepts either a person's display name or their email address.
-
-For example:
+The Sender field accepts a display name, email address or partial text.
 
 ```text
 Name Surname
 ```
 
-or:
-
 ```text
 namesurname@example.com
 ```
-
-Partial searches are also supported:
 
 ```text
 surname
 ```
 
-The comparison is case-insensitive.
-
-The macro checks both:
-
-```text
-SenderName
-```
-
-and:
-
-```text
-SenderEmailAddress
-```
-
-For Exchange accounts, it also attempts to resolve the sender's primary SMTP address.
+Matching is case-insensitive. The macro checks both the sender display name and email address. For Exchange accounts it also attempts to resolve the sender's primary SMTP address.
 
 ---
 
-# 📝 Subject Search
+## 📝 Subject Search
 
-You can enter part of an email subject.
-
-For example:
+Enter any text the subject must contain, for example:
 
 ```text
 Daily Report
 ```
 
-This can match subjects such as:
+This can match:
 
 ```text
 Daily Report 20260624
@@ -403,35 +190,26 @@ Site Daily Report
 DAILY REPORT 2026-06-24
 ```
 
-Subject matching is case-insensitive.
-
-Leave the Subject field blank if you do not want to filter by subject.
+Leave the field blank to ignore subject filtering.
 
 ---
 
-# 📅 Date Filtering
+## 📅 Date Filtering
 
 The date range is optional.
 
-Example:
-
 ```text
-From Date:
-01/06/2026
-
-To Date:
-30/06/2026
+From Date: 01/06/2026
+To Date:   30/06/2026
 ```
 
-The entire final day is included.
-
-Leave either field blank if that limit is not required.
+The complete final day is included. Leave either field blank if that limit is not required.
 
 ---
 
-# 📂 Attachment Organization
+## 📂 Attachment Organization
 
-After choosing the emails, OutlookAttachSnatcher asks:
+The macro asks:
 
 ```text
 How should attachments be organized?
@@ -441,13 +219,7 @@ NO = Create a separate folder for each email
 CANCEL = Exit
 ```
 
----
-
-## 📁 Single Folder
-
-Selecting **YES** saves every attachment into the selected destination.
-
-Example:
+### Single folder
 
 ```text
 Attachments/
@@ -458,50 +230,29 @@ Attachments/
 └── Report_1.xlsx
 ```
 
----
-
-## 🗂️ Separate Folder for Each Email
-
-Selecting **NO** creates a separate directory for each email.
-
-Example:
+### Separate folder for each email
 
 ```text
 Attachments/
-│
 ├── 2026-06-24_09-15 - Name Surname - Daily Report/
 │   ├── Daily_Report.pdf
 │   └── Drawing.pdf
-│
-├── 2026-06-25_09-20 - Name Surname - Daily Report/
-│   ├── Daily_Report.pdf
-│   └── Site_Photo.jpg
-│
-└── 2026-06-26_09-18 - Name Surname - Daily Report/
-    └── Daily_Report.pdf
+└── 2026-06-25_09-20 - Name Surname - Daily Report/
+    ├── Daily_Report.pdf
+    └── Site_Photo.jpg
 ```
 
-The folder naming format is:
+Generated email folders use the format:
 
 ```text
 YYYY-MM-DD_HH-MM - Sender - Subject
 ```
 
-Invalid Windows filename characters are automatically replaced.
-
 ---
 
-# 🔢 Duplicate Filename Protection
+## 🔢 Duplicate Filename Protection
 
-OutlookAttachSnatcher does not intentionally overwrite existing files.
-
-If the destination already contains:
-
-```text
-Report.pdf
-```
-
-additional files are automatically renamed:
+Existing files are not intentionally overwritten. If `Report.pdf` already exists, subsequent attachments are named:
 
 ```text
 Report.pdf
@@ -510,15 +261,11 @@ Report_2.pdf
 Report_3.pdf
 ```
 
-This is especially useful when downloading attachments from recurring reports where every attachment uses the same filename.
-
 ---
 
-# ⏳ Progress Tracking
+## ⏳ Progress Tracking
 
-Before downloading, OutlookAttachSnatcher scans the matching messages.
-
-For example:
+Before downloading, OutlookAttachSnatcher scans the matching messages and shows totals such as:
 
 ```text
 Matched emails: 184
@@ -526,137 +273,70 @@ Total attachments: 300
 Total size: 4.82 GB
 ```
 
-You can confirm the operation before any files are downloaded.
-
-During processing, live progress is displayed.
-
-Example:
+During processing, a temporary Outlook progress toolbar shows the current count and percentage, for example:
 
 ```text
 [##########--------------] 127 / 300 - 42%
 ```
 
-The current attachment can also be displayed:
-
-```text
-Downloading: Daily_Report_20260624.pdf (184.70 MB)
-```
+It also displays the current attachment/status where supported by the Classic Outlook CommandBars UI.
 
 ---
 
-# ⌨️ Cancel a Download
+## ⌨️ Cancel a Download
 
-Press:
-
-```text
-ESC
-```
-
-during processing to request cancellation.
-
-The downloader stops at a safe point rather than deliberately terminating Outlook.
+Press `ESC` during processing to request cancellation. The macro stops at a safe point.
 
 > [!NOTE]
-> `Attachment.SaveAsFile` is a synchronous Outlook operation.
->
-> If Outlook is currently writing one very large attachment, cancellation takes effect after that individual save operation returns.
+> `Attachment.SaveAsFile` is synchronous. If Outlook is currently writing one large attachment, cancellation takes effect after that individual save operation returns.
 
 ---
 
-# 🛡️ Large File Safety
+## 🛡️ Large File Safety
 
-Attachments are first written using a temporary filename.
-
-For example:
+Attachments are first written using a temporary filename:
 
 ```text
 Daily_Report.pdf.downloading
 ```
 
-After Outlook successfully saves the attachment, the file is renamed to:
+After Outlook successfully saves the attachment, it is renamed to:
 
 ```text
 Daily_Report.pdf
 ```
 
-This reduces the chance of an interrupted or failed operation leaving a partial file that appears to be a successfully downloaded attachment.
-
-Failed temporary files are cleaned up where possible.
+If the save fails, the macro attempts to clean up the temporary file and continues with the remaining attachments.
 
 ---
 
-# 💾 Disk Space Check
+## 💾 Disk Space Check
 
-Before downloading, OutlookAttachSnatcher calculates the combined reported size of the matching attachments.
+Before downloading, OutlookAttachSnatcher calculates the combined reported attachment size and checks local free disk space with a 10% safety margin.
 
-A safety margin is added when checking available local disk space.
-
-For example:
-
-```text
-Total attachments: 300
-Total size: 4.82 GB
-Safety margin: 10%
-```
-
-If there does not appear to be enough free space, the operation is stopped before downloading.
-
-For UNC/network locations, free-space reporting is not always reliable, so the downloader does not block the operation solely because it cannot determine network free space.
+For UNC/network paths, free-space reporting is not always reliable, so inability to determine network free space does not by itself block the job.
 
 ---
 
-# 📏 Long Filename Protection
+## 📏 Path and Filename Protection
 
-Windows and Outlook can encounter problems when a combination of:
-
-```text
-Destination Path
-+ Sender
-+ Subject
-+ Attachment Filename
-```
-
-becomes excessively long.
-
-OutlookAttachSnatcher automatically limits generated filename lengths to reduce these failures.
+The macro sanitizes characters that are invalid in Windows filenames and limits generated attachment filename lengths to reduce failures caused by long paths.
 
 ---
 
-# 🚀 Large Mailboxes and Large Batches
+## 🚀 Large Mailboxes and Large Batches
 
-OutlookAttachSnatcher is designed to handle larger operations without unnecessarily keeping hundreds or thousands of Outlook message objects alive.
+During the initial scan, OutlookAttachSnatcher stores lightweight `EntryID` and `StoreID` references for matching messages. It retrieves each message again only when needed for processing instead of deliberately retaining hundreds or thousands of Outlook `MailItem` COM objects.
 
-During the initial scan it stores lightweight identifiers for matching messages and retrieves the messages again when needed for processing.
-
-It also periodically calls:
-
-```text
-DoEvents
-```
-
-to allow Windows and Outlook to process UI events during long operations.
-
-This helps keep Outlook more responsive when processing large batches.
+It also calls `DoEvents` periodically so Outlook and Windows can process UI events during long jobs.
 
 ---
 
-# 🧵 Why Isn't It Multithreaded?
+## 🧵 Why Isn't It Multithreaded?
 
-OutlookAttachSnatcher intentionally processes Outlook attachments sequentially.
+Classic Outlook VBA uses the Outlook Object Model through COM. Outlook objects such as `MailItem`, `Attachment` and `AddressEntry` should not be treated as safely parallelizable VBA objects.
 
-Classic Outlook VBA uses the Outlook Object Model through COM. Outlook objects such as:
-
-```text
-MailItem
-Attachment
-AddressEntry
-```
-
-should not be treated as safely parallelizable VBA objects.
-
-Attempting to force multithreaded Outlook VBA processing could make the application less reliable rather than faster.
-
-Instead, OutlookAttachSnatcher uses:
+OutlookAttachSnatcher therefore prioritizes reliability with:
 
 - Sequential attachment processing
 - Cooperative UI yielding
@@ -667,15 +347,11 @@ Instead, OutlookAttachSnatcher uses:
 - Pre-scanning
 - Disk-space validation
 
-The priority is **reliability and data safety**.
-
-For genuinely parallel, server-side attachment processing, a separate implementation using technologies such as Microsoft Graph or another appropriate API would be a different architecture.
+A truly parallel/server-side implementation would require a different architecture, such as Microsoft Graph or another appropriate API.
 
 ---
 
-# 📊 Completion Summary
-
-At the end of a job, OutlookAttachSnatcher displays a summary.
+## 📊 Completion Summary
 
 Example:
 
@@ -692,58 +368,38 @@ Processed: 300 / 300
 Status: Completed
 ```
 
-If the user cancels:
-
-```text
-Status: Cancelled by user
-```
+A cancelled job reports `Status: Cancelled by user`.
 
 ---
 
-# ⚠️ Macro Security
+## ⚠️ Macro Security
 
-Microsoft Outlook may prevent VBA macros from running depending on your Office security configuration or your organization's policies.
-
-Only enable and run macros from sources you trust.
-
-You can inspect the complete source code in:
-
-```text
-OutlookAttachSnatcher.bas
-```
-
-before running it.
+Outlook may prevent VBA macros from running depending on Office security settings or organizational policy. Only enable and run macros from sources you trust, and inspect `OutlookAttachSnatcher.bas` before running it.
 
 > [!WARNING]
-> Do not globally weaken Office security settings simply to run a macro, especially on a managed work computer.
->
-> If macros are disabled by your organization, contact your IT administrator.
+> Do not globally weaken Office security settings simply to run a macro, especially on a managed work computer. If macros are disabled by your organization, contact your IT administrator.
 
 ---
 
-# 🌐 Unicode / International Filenames
+## 🌐 Unicode / International Filenames
 
-The macro does not intentionally convert attachment filenames, email subjects, or sender names to ASCII/Greeklish.
+The macro does not intentionally convert attachment filenames, email subjects or sender names to ASCII/Greeklish. Windows-compatible Unicode filenames can remain in their original language where supported by Outlook/VBA and the filesystem.
 
-Windows-compatible Unicode filenames can therefore remain in their original language where supported by Outlook/VBA and the filesystem.
-
-The user-interface text contained directly in the VBA source is English for maximum compatibility across different Windows and Office language configurations.
+The macro's own UI messages are written in English for broad compatibility across Office installations.
 
 ---
 
-# 🧰 Troubleshooting
+## 🧰 Troubleshooting
 
 ### The macro does not appear in `ALT + F8`
 
-Make sure the main procedure is declared as:
+Make sure the main procedure is:
 
 ```vb
-Public Sub OutlookBulkAttachmentDownloader()
+Public Sub OutlookAttachSnatcher()
 ```
 
-and that the code is inside a **standard Module**, not `ThisOutlookSession`.
-
----
+and that the code is in a **standard Module**, not `ThisOutlookSession`.
 
 ### The button does nothing
 
@@ -751,60 +407,48 @@ Check that:
 
 - You are using Classic Outlook
 - VBA macros are permitted
-- The macro still exists in the VBA project
-- The button is assigned to `OutlookBulkAttachmentDownloader`
-
----
+- `OutlookAttachSnatcher` still exists in the VBA project
+- The button is assigned to `OutlookAttachSnatcher`
 
 ### Search returns no emails
 
-Check:
-
-- You are inside the correct Outlook folder
-- Sender spelling
-- Email address
-- Subject text
-- Date range
-
-Remember that automatic searching currently operates on the **current Outlook folder**.
-
----
+Check the current Outlook folder, sender spelling/email, subject filter and date range.
 
 ### Does it search subfolders?
 
-No.
-
-The current version searches the folder that is currently open in Outlook.
-
-Subfolder/recursive mailbox searching is not currently enabled.
-
----
+No. The current version searches only the folder currently open in Outlook.
 
 ### A file failed to download
 
-The downloader will count the attachment as failed and continue with the remaining files where possible.
-
-This prevents one problematic attachment from stopping an entire large batch.
+The macro counts the attachment as failed and continues with the remaining files where possible.
 
 ---
 
-# 📄 Project Structure
+## 📸 Screenshots
 
-The repository can remain very simple:
+Screenshots will be added under `screenshots/` as the UI documentation is completed.
+
+Recommended repository layout:
 
 ```text
 OutlookAttachSnatcher/
-│
 ├── OutlookAttachSnatcher.bas
 ├── README.md
-└── LICENSE
+├── LICENSE
+└── screenshots/
+    ├── 01-outlook-button.png
+    ├── 02-mode-selection.png
+    ├── 03-search-filter.png
+    ├── 04-pre-scan-summary.png
+    ├── 05-progress.png
+    └── 06-completed.png
 ```
 
-No external dependencies are required.
+Before publishing screenshots, remove or blur real names, email addresses, project names and other private/company information.
 
 ---
 
-# 🔧 Compatibility
+## 🔧 Compatibility
 
 | Feature | Supported |
 |---|---|
@@ -819,20 +463,19 @@ No external dependencies are required.
 | Separate folders | ✅ |
 | Progress counter | ✅ |
 | ESC cancellation | ✅ |
-| Large batch handling | ✅ |
+| Large-batch handling | ✅ |
 | True multithreading | ❌ |
 | Recursive subfolder search | ❌ |
 
 ---
 
-# 🤝 Contributing
+## 🗺️ Roadmap
 
-Bug reports, improvements, suggestions, and pull requests are welcome.
+Potential future improvements:
 
-Potential future improvements include:
-
+- CSV download/error log
+- Full destination-path-aware folder truncation
 - Recursive subfolder searching
-- Download log / CSV report
 - Attachment extension filters
 - Attachment size filters
 - Saved search presets
@@ -841,16 +484,20 @@ Potential future improvements include:
 
 ---
 
-# 📜 License
+## 🤝 Contributing
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
-
-See the `LICENSE` file for details.
+Bug reports, improvements, suggestions and pull requests are welcome.
 
 ---
 
-# ⭐ OutlookAttachSnatcher
+## 📜 License
+
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See `LICENSE` for details.
+
+---
+
+## ⭐ OutlookAttachSnatcher
 
 If OutlookAttachSnatcher saves you from manually opening hundreds of emails and clicking **Save As** all day, consider giving the repository a ⭐.
 
-Happy attachment snatching. 📎
+**Happy attachment snatching. 📎**
