@@ -1,10 +1,13 @@
 # 📎 OutlookAttachSnatcher
+### VBA Macro for Classic Microsoft Outlook
 
 **Bulk-download and organize Outlook attachments without opening emails one by one.**
 
-OutlookAttachSnatcher is a VBA macro for **Classic Microsoft Outlook for Windows** that downloads attachments from multiple emails in one operation. Select messages manually, or search the current Outlook folder by sender name/email, subject and date range.
+OutlookAttachSnatcher is a **VBA macro for Classic Microsoft Outlook on Windows** that downloads attachments from multiple emails in one operation. Select messages manually, or search the current Outlook folder by sender name/email, subject and date range.
 
 It includes progress tracking, duplicate protection, temporary-file safety, cancellation support, disk-space checking and large-batch-friendly processing.
+
+> **Platform:** Windows · Classic Microsoft Outlook · VBA Macro
 
 ---
 
@@ -29,7 +32,7 @@ It includes progress tracking, duplicate protection, temporary-file safety, canc
 - ⌨️ Press `ESC` to cancel at a safe point
 - ⚡ Uses cooperative UI yielding to keep Outlook responsive
 - 🧠 Stores lightweight message IDs instead of keeping large numbers of `MailItem` objects in memory
-- 📦 Everything is contained in **one VBA module**
+- 📦 Everything is contained in **one VBA standard module (`.bas`)**
 - 🔧 No external libraries or additional software required
 
 ---
@@ -47,7 +50,7 @@ It includes progress tracking, duplicate protection, temporary-file safety, canc
 
 ## 📦 Installation
 
-### Option A — Import the module (recommended)
+### Option A — Import the VBA module (recommended)
 
 1. Download `OutlookAttachSnatcher.bas` from this repository.
 2. Open **Classic Outlook**.
@@ -87,7 +90,7 @@ and click **Run**.
 
 ## 🔘 Add OutlookAttachSnatcher as an Outlook Button
 
-For regular use, add the macro to the **Quick Access Toolbar** or the Outlook **Ribbon**.
+For regular use, add the VBA macro to the **Quick Access Toolbar** or the Outlook **Ribbon**.
 
 ### Option A — Quick Access Toolbar
 
@@ -454,6 +457,7 @@ Before publishing screenshots, remove or blur real names, email addresses, proje
 |---|---|
 | Classic Outlook for Windows | ✅ |
 | New Outlook for Windows | ❌ |
+| VBA standard module (`.bas`) | ✅ |
 | Multiple selected emails | ✅ |
 | Search by sender name | ✅ |
 | Search by sender email | ✅ |
