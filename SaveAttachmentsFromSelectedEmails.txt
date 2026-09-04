@@ -80,7 +80,7 @@ Private gCancelled As Boolean
 ' MAIN PROCEDURE
 ' ============================================================
 
-Public Sub OutlookBulkAttachmentDownloader()
+Public Sub OutlookAttachSnatcher()
 
     On Error GoTo FatalError
 
