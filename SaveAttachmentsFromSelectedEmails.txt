@@ -1,170 +1,1938 @@
 Option Explicit
 
-Sub SaveAttachmentsFromSelectedEmails()
+' ============================================================
+' OUTLOOK BULK ATTACHMENT DOWNLOADER
+' Single-module version
+'
+' Features:
+' - Selected emails OR search current Outlook folder
+' - Sender name OR sender email
+' - Subject contains
+' - Optional date range
+' - One folder OR separate folder per email
+' - Pre-scan and attachment counting
+' - Total download size
+' - Live progress toolbar
+' - ESC to cancel
+' - Duplicate filename protection
+' - Temporary .downloading files
+' - Long filename/path protection
+' - Disk space check
+' - Large mailbox / many-record friendly
+' - Individual file error handling
+'
+' Classic Outlook for Windows only.
+' ============================================================
 
-    Dim objSelection As Outlook.Selection
-    Dim objItem As Object
-    Dim objAttachment As Outlook.Attachment
+
+' ============================================================
+' WINDOWS API
+' Used only to detect ESC for cancellation.
+' ============================================================
+
+#If VBA7 Then
+
+    Private Declare PtrSafe Function GetAsyncKeyState _
+        Lib "user32" _
+        (ByVal vKey As Long) As Integer
+
+#Else
+
+    Private Declare Function GetAsyncKeyState _
+        Lib "user32" _
+        (ByVal vKey As Long) As Integer
+
+#End If
+
+
+' ============================================================
+' CONSTANTS
+' ============================================================
+
+Private Const MAX_PATH_LENGTH As Long = 235
+
+Private Const UI_YIELD_INTERVAL As Long = 5
+
+Private Const FREE_SPACE_MARGIN As Double = 1.1
+
+Private Const PROGRESS_BAR_LENGTH As Long = 24
+
+Private Const VK_ESCAPE As Long = 27
+
+Private Const msoBarFloating As Long = 4
+
+Private Const msoControlButton As Long = 1
+
+
+' ============================================================
+' GLOBAL PROGRESS TOOLBAR OBJECTS
+' ============================================================
+
+Private gProgressBar As Object
+Private gProgressStatus As Object
+Private gProgressCount As Object
+Private gProgressCancel As Object
+
+Private gCancelled As Boolean
+
+
+' ============================================================
+' MAIN PROCEDURE
+' ============================================================
+
+Public Sub OutlookBulkAttachmentDownloader()
+
+    On Error GoTo FatalError
+
+
+    Dim mode As VbMsgBoxResult
+    Dim saveMode As VbMsgBoxResult
+
+    Dim senderFilter As String
+    Dim subjectFilter As String
+
+    Dim fromDateText As String
+    Dim toDateText As String
+
+    Dim fromDate As Date
+    Dim toDate As Date
+
+    Dim useFromDate As Boolean
+    Dim useToDate As Boolean
 
     Dim baseFolder As String
-    Dim targetFolder As String
-    Dim filePath As String
-    Dim fileName As String
 
     Dim shellApp As Object
     Dim folderObj As Object
 
-    Dim answer As VbMsgBoxResult
-    Dim counter As Long
+    Dim ns As Outlook.NameSpace
+
+    Dim objSelection As Outlook.Selection
+    Dim objFolder As Outlook.Folder
+    Dim objItems As Outlook.Items
+    Dim objItem As Object
+
+    Dim mail As Outlook.MailItem
+    Dim att As Outlook.Attachment
+
+    Dim matchedEmails As Long
+
+    Dim totalAttachments As Long
+    Dim totalBytes As Double
+
+    Dim processedFiles As Long
     Dim savedFiles As Long
-    Dim emailFolderName As String
+    Dim failedFiles As Long
 
-    Set objSelection = Application.ActiveExplorer.Selection
+    Dim scanCounter As Long
 
-    If objSelection.Count = 0 Then
-        MsgBox "Den exeis epileksei email.", vbExclamation, "Attachments"
-        Exit Sub
-    End If
+    Dim continueAnswer As VbMsgBoxResult
 
-    answer = MsgBox( _
-        "Theleis ola ta attachments se ENAN fakelo?" & vbCrLf & vbCrLf & _
-        "YES = Ola mazi se enan fakelo" & vbCrLf & _
-        "NO = Xehoristos fakelos gia kathe email" & vbCrLf & _
-        "CANCEL = Akyro", _
+    Dim entryIDs As Collection
+    Dim storeIDs As Collection
+
+    Dim entryID As String
+    Dim storeID As String
+
+    Dim i As Long
+
+    Dim resultText As String
+
+
+    gCancelled = False
+
+    Set ns = Application.Session
+
+    Set entryIDs = New Collection
+    Set storeIDs = New Collection
+
+
+    ' ========================================================
+    ' STEP 1
+    ' CHOOSE PROCESSING MODE
+    ' ========================================================
+
+    mode = MsgBox( _
+        "Choose how you want to process emails:" & vbCrLf & vbCrLf & _
+        "YES = Process currently selected emails" & vbCrLf & _
+        "NO = Search current Outlook folder" & vbCrLf & _
+        "CANCEL = Exit", _
         vbYesNoCancel + vbQuestion, _
-        "Tropos apothikefsis")
+        "Outlook Bulk Attachment Downloader")
 
-    If answer = vbCancel Then Exit Sub
 
-    Set shellApp = CreateObject("Shell.Application")
-    Set folderObj = shellApp.BrowseForFolder(0, _
-        "Dialekse ton vasiko fakelo apothikefsis:", 0)
+    If mode = vbCancel Then Exit Sub
 
-    If folderObj Is Nothing Then Exit Sub
 
-    baseFolder = folderObj.Self.Path
+    ' ========================================================
+    ' STEP 2
+    ' SEARCH FILTERS
+    ' ========================================================
 
-    If Right(baseFolder, 1) <> "\" Then
-        baseFolder = baseFolder & "\"
-    End If
+    If mode = vbNo Then
 
-    savedFiles = 0
+        senderFilter = InputBox( _
+            "Enter sender name OR sender email." & vbCrLf & vbCrLf & _
+            "Examples:" & vbCrLf & _
+            "Name Surname" & vbCrLf & _
+            "namesurname@example.com" & vbCrLf & _
+            "surname" & vbCrLf & vbCrLf & _
+            "Leave blank to ignore sender filtering.", _
+            "Sender Filter")
 
-    For Each objItem In objSelection
 
-        If TypeOf objItem Is Outlook.MailItem Then
+        subjectFilter = InputBox( _
+            "Enter text that the email subject must contain." & vbCrLf & vbCrLf & _
+            "Example:" & vbCrLf & _
+            "Daily Report" & vbCrLf & vbCrLf & _
+            "Leave blank to ignore subject filtering.", _
+            "Subject Filter")
 
-            If answer = vbNo Then
 
-                emailFolderName = Format(objItem.ReceivedTime, "yyyy-mm-dd_hh-nn") & _
-                                  " - " & CleanFileName(GetSenderName(objItem)) & _
-                                  " - " & CleanFileName(objItem.Subject)
+        fromDateText = InputBox( _
+            "Optional start date." & vbCrLf & vbCrLf & _
+            "Example:" & vbCrLf & _
+            "01/06/2026" & vbCrLf & vbCrLf & _
+            "Leave blank for no start date.", _
+            "From Date")
 
-                If Len(emailFolderName) > 120 Then
-                    emailFolderName = Left(emailFolderName, 120)
-                End If
 
-                targetFolder = baseFolder & emailFolderName & "\"
+        If Trim(fromDateText) <> "" Then
 
-                If Dir(targetFolder, vbDirectory) = "" Then
-                    MkDir targetFolder
-                End If
+            If Not IsDate(fromDateText) Then
 
-            Else
-                targetFolder = baseFolder
+                MsgBox _
+                    "Invalid start date.", _
+                    vbExclamation, _
+                    "Error"
+
+                Exit Sub
+
             End If
 
-            For Each objAttachment In objItem.Attachments
 
-                fileName = CleanFileName(objAttachment.FileName)
-                filePath = targetFolder & fileName
+            fromDate = _
+                DateValue(CDate(fromDateText))
 
-                counter = 1
-
-                Do While Dir(filePath) <> ""
-
-                    filePath = targetFolder & _
-                               GetFileNameWithoutExtension(fileName) & _
-                               "_" & counter & _
-                               GetFileExtension(fileName)
-
-                    counter = counter + 1
-
-                Loop
-
-                objAttachment.SaveAsFile filePath
-                savedFiles = savedFiles + 1
-
-            Next objAttachment
+            useFromDate = True
 
         End If
 
-    Next objItem
 
-    MsgBox "Oloklirothike!" & vbCrLf & _
-           "Apothikeftikan " & savedFiles & " attachments.", _
-           vbInformation, _
-           "Attachments"
+        toDateText = InputBox( _
+            "Optional end date." & vbCrLf & vbCrLf & _
+            "Example:" & vbCrLf & _
+            "30/06/2026" & vbCrLf & vbCrLf & _
+            "Leave blank for no end date.", _
+            "To Date")
+
+
+        If Trim(toDateText) <> "" Then
+
+            If Not IsDate(toDateText) Then
+
+                MsgBox _
+                    "Invalid end date.", _
+                    vbExclamation, _
+                    "Error"
+
+                Exit Sub
+
+            End If
+
+
+            ' Add one day so the complete final day is included.
+            toDate = _
+                DateValue(CDate(toDateText)) + 1
+
+            useToDate = True
+
+        End If
+
+
+        If useFromDate And useToDate Then
+
+            If fromDate >= toDate Then
+
+                MsgBox _
+                    "The start date must be before or equal to the end date.", _
+                    vbExclamation, _
+                    "Invalid Date Range"
+
+                Exit Sub
+
+            End If
+
+        End If
+
+    End If
+
+
+    ' ========================================================
+    ' STEP 3
+    ' CHOOSE OUTPUT ORGANIZATION
+    ' ========================================================
+
+    saveMode = MsgBox( _
+        "How should attachments be organized?" & vbCrLf & vbCrLf & _
+        "YES = Save all attachments in one folder" & vbCrLf & _
+        "NO = Create a separate folder for each email" & vbCrLf & _
+        "CANCEL = Exit", _
+        vbYesNoCancel + vbQuestion, _
+        "Save Mode")
+
+
+    If saveMode = vbCancel Then Exit Sub
+
+
+    ' ========================================================
+    ' STEP 4
+    ' SELECT DESTINATION FOLDER
+    ' ========================================================
+
+    Set shellApp = _
+        CreateObject("Shell.Application")
+
+
+    Set folderObj = _
+        shellApp.BrowseForFolder( _
+            0, _
+            "Select the destination folder:", _
+            0)
+
+
+    If folderObj Is Nothing Then Exit Sub
+
+
+    baseFolder = _
+        folderObj.Self.Path
+
+
+    If Right(baseFolder, 1) <> "\" Then
+
+        baseFolder = _
+            baseFolder & "\"
+
+    End If
+
+
+    ' ========================================================
+    ' STEP 5
+    ' PRE-SCAN
+    '
+    ' Store only EntryID + StoreID instead of holding hundreds
+    ' or thousands of Outlook MailItem COM objects in memory.
+    ' ========================================================
+
+    If mode = vbYes Then
+
+        Set objSelection = _
+            Application.ActiveExplorer.Selection
+
+
+        If objSelection.Count = 0 Then
+
+            MsgBox _
+                "No emails are selected.", _
+                vbExclamation, _
+                "No Selection"
+
+            Exit Sub
+
+        End If
+
+
+        For Each objItem In objSelection
+
+            If TypeOf objItem Is Outlook.MailItem Then
+
+                Set mail = objItem
+
+
+                entryID = ""
+                storeID = ""
+
+
+                On Error Resume Next
+
+                entryID = mail.EntryID
+                storeID = mail.Parent.StoreID
+
+                On Error GoTo FatalError
+
+
+                If entryID <> "" Then
+
+                    entryIDs.Add entryID
+                    storeIDs.Add storeID
+
+                    matchedEmails = _
+                        matchedEmails + 1
+
+
+                    For Each att In mail.Attachments
+
+                        totalAttachments = _
+                            totalAttachments + 1
+
+                        totalBytes = _
+                            totalBytes + CDbl(att.Size)
+
+                    Next att
+
+                End If
+
+            End If
+
+
+            scanCounter = scanCounter + 1
+
+
+            If scanCounter Mod 25 = 0 Then
+                DoEvents
+            End If
+
+        Next objItem
+
+
+    Else
+
+        Set objFolder = _
+            Application.ActiveExplorer.CurrentFolder
+
+
+        Set objItems = _
+            objFolder.Items
+
+
+        For Each objItem In objItems
+
+            If TypeOf objItem Is Outlook.MailItem Then
+
+                Set mail = objItem
+
+
+                If MailMatchesFilters( _
+                    mail, _
+                    senderFilter, _
+                    subjectFilter, _
+                    fromDate, _
+                    toDate, _
+                    useFromDate, _
+                    useToDate) Then
+
+
+                    entryID = ""
+                    storeID = ""
+
+
+                    On Error Resume Next
+
+                    entryID = mail.EntryID
+                    storeID = mail.Parent.StoreID
+
+                    On Error GoTo FatalError
+
+
+                    If entryID <> "" Then
+
+                        entryIDs.Add entryID
+                        storeIDs.Add storeID
+
+                        matchedEmails = _
+                            matchedEmails + 1
+
+
+                        For Each att In mail.Attachments
+
+                            totalAttachments = _
+                                totalAttachments + 1
+
+                            totalBytes = _
+                                totalBytes + CDbl(att.Size)
+
+                        Next att
+
+                    End If
+
+                End If
+
+            End If
+
+
+            scanCounter = _
+                scanCounter + 1
+
+
+            If scanCounter Mod 25 = 0 Then
+                DoEvents
+            End If
+
+        Next objItem
+
+    End If
+
+
+    ' ========================================================
+    ' NOTHING FOUND
+    ' ========================================================
+
+    If matchedEmails = 0 Then
+
+        MsgBox _
+            "No matching emails were found.", _
+            vbInformation, _
+            "No Results"
+
+        Exit Sub
+
+    End If
+
+
+    If totalAttachments = 0 Then
+
+        MsgBox _
+            Format(matchedEmails, "#,##0") & _
+            " matching email(s) were found," & vbCrLf & _
+            "but none of them contain attachments.", _
+            vbInformation, _
+            "No Attachments"
+
+        Exit Sub
+
+    End If
+
+
+    ' ========================================================
+    ' DISK SPACE CHECK
+    ' ========================================================
+
+    If Not HasEnoughDiskSpace( _
+        baseFolder, _
+        totalBytes) Then
+
+
+        MsgBox _
+            "There may not be enough free disk space." & _
+            vbCrLf & vbCrLf & _
+            "Attachment size: " & _
+            FormatBytes(totalBytes) & vbCrLf & _
+            "Safety margin: 10%" & vbCrLf & vbCrLf & _
+            "Please select another drive or free some disk space.", _
+            vbCritical, _
+            "Insufficient Disk Space"
+
+        Exit Sub
+
+    End If
+
+
+    ' ========================================================
+    ' CONFIRM JOB
+    ' ========================================================
+
+    continueAnswer = MsgBox( _
+        "Ready to download attachments." & _
+        vbCrLf & vbCrLf & _
+        "Matched emails: " & _
+        Format(matchedEmails, "#,##0") & vbCrLf & _
+        "Total attachments: " & _
+        Format(totalAttachments, "#,##0") & vbCrLf & _
+        "Total size: " & _
+        FormatBytes(totalBytes) & vbCrLf & vbCrLf & _
+        "Press ESC during processing to cancel." & _
+        vbCrLf & vbCrLf & _
+        "Continue?", _
+        vbYesNo + vbQuestion, _
+        "Ready")
+
+
+    If continueAnswer <> vbYes Then Exit Sub
+
+
+    ' ========================================================
+    ' CREATE PROGRESS TOOLBAR
+    ' ========================================================
+
+    CreateProgressToolbar
+
+
+    UpdateProgressToolbar _
+        0, _
+        totalAttachments, _
+        "Starting download..."
+
+
+    ' Clear any previous ESC state.
+    Call GetAsyncKeyState(VK_ESCAPE)
+
+
+    ' ========================================================
+    ' PROCESS MATCHED EMAILS
+    ' ========================================================
+
+    For i = 1 To entryIDs.Count
+
+        If EscapePressed() Then
+
+            gCancelled = True
+            Exit For
+
+        End If
+
+
+        Set mail = Nothing
+
+
+        On Error Resume Next
+
+        Set mail = _
+            ns.GetItemFromID( _
+                CStr(entryIDs(i)), _
+                CStr(storeIDs(i)))
+
+        On Error GoTo FatalError
+
+
+        If Not mail Is Nothing Then
+
+            SaveMailAttachments _
+                mail, _
+                baseFolder, _
+                saveMode, _
+                processedFiles, _
+                savedFiles, _
+                failedFiles, _
+                totalAttachments
+
+        End If
+
+
+        If gCancelled Then Exit For
+
+
+        If i Mod 10 = 0 Then
+            DoEvents
+        End If
+
+    Next i
+
+
+    ' ========================================================
+    ' FINISH PROGRESS DISPLAY
+    ' ========================================================
+
+    If gCancelled Then
+
+        UpdateProgressToolbar _
+            processedFiles, _
+            totalAttachments, _
+            "Cancelled by user"
+
+    Else
+
+        UpdateProgressToolbar _
+            totalAttachments, _
+            totalAttachments, _
+            "Completed"
+
+    End If
+
+
+    DoEvents
+
+
+    ' ========================================================
+    ' FINAL SUMMARY
+    ' ========================================================
+
+    resultText = _
+        "Operation finished." & vbCrLf & vbCrLf & _
+        "Matched emails: " & _
+        Format(matchedEmails, "#,##0") & vbCrLf & _
+        "Total attachments: " & _
+        Format(totalAttachments, "#,##0") & vbCrLf & _
+        "Total size: " & _
+        FormatBytes(totalBytes) & vbCrLf & _
+        "Downloaded: " & _
+        Format(savedFiles, "#,##0") & vbCrLf & _
+        "Failed: " & _
+        Format(failedFiles, "#,##0") & vbCrLf & _
+        "Processed: " & _
+        Format(processedFiles, "#,##0") & _
+        " / " & _
+        Format(totalAttachments, "#,##0")
+
+
+    If gCancelled Then
+
+        resultText = _
+            resultText & vbCrLf & vbCrLf & _
+            "Status: Cancelled by user"
+
+    Else
+
+        resultText = _
+            resultText & vbCrLf & vbCrLf & _
+            "Status: Completed"
+
+    End If
+
+
+    DestroyProgressToolbar
+
+
+    MsgBox _
+        resultText & vbCrLf & vbCrLf & _
+        "Destination:" & vbCrLf & _
+        baseFolder, _
+        vbInformation, _
+        "Outlook Bulk Attachment Downloader"
+
+
+    Exit Sub
+
+
+' ============================================================
+' FATAL ERROR HANDLER
+' ============================================================
+
+FatalError:
+
+    DestroyProgressToolbar
+
+
+    MsgBox _
+        "The operation stopped because of an unexpected error." & _
+        vbCrLf & vbCrLf & _
+        "Error " & Err.Number & vbCrLf & _
+        Err.Description, _
+        vbCritical, _
+        "Outlook Bulk Attachment Downloader"
 
 End Sub
 
 
-Function CleanFileName(ByVal fileName As String) As String
+' ============================================================
+' FILTER MATCHING
+' ============================================================
 
-    Dim invalidChars As Variant
-    Dim ch As Variant
-
-    invalidChars = Array("\", "/", ":", "*", "?", """", "<", ">", "|")
-
-    For Each ch In invalidChars
-        fileName = Replace(fileName, ch, "_")
-    Next ch
-
-    CleanFileName = Trim(fileName)
-
-End Function
+Private Function MailMatchesFilters( _
+    ByVal mail As Outlook.MailItem, _
+    ByVal senderFilter As String, _
+    ByVal subjectFilter As String, _
+    ByVal fromDate As Date, _
+    ByVal toDate As Date, _
+    ByVal useFromDate As Boolean, _
+    ByVal useToDate As Boolean) As Boolean
 
 
-Function GetFileNameWithoutExtension(ByVal fileName As String) As String
+    Dim senderName As String
+    Dim senderEmail As String
 
-    Dim p As Long
-
-    p = InStrRev(fileName, ".")
-
-    If p > 0 Then
-        GetFileNameWithoutExtension = Left(fileName, p - 1)
-    Else
-        GetFileNameWithoutExtension = fileName
-    End If
-
-End Function
+    Dim senderMatched As Boolean
+    Dim subjectMatched As Boolean
 
 
-Function GetFileExtension(ByVal fileName As String) As String
+    senderName = ""
+    senderEmail = ""
 
-    Dim p As Long
-
-    p = InStrRev(fileName, ".")
-
-    If p > 0 Then
-        GetFileExtension = Mid(fileName, p)
-    Else
-        GetFileExtension = ""
-    End If
-
-End Function
-
-
-Function GetSenderName(ByVal mail As Outlook.MailItem) As String
 
     On Error Resume Next
 
-    If Trim(mail.SenderName) <> "" Then
-        GetSenderName = mail.SenderName
-    Else
-        GetSenderName = "Unknown Sender"
-    End If
+    senderName = mail.SenderName
+    senderEmail = GetSenderEmail(mail)
 
     On Error GoTo 0
+
+
+    ' ========================================================
+    ' Sender Name OR Sender Email
+    ' ========================================================
+
+    If Trim(senderFilter) = "" Then
+
+        senderMatched = True
+
+    Else
+
+        senderMatched = _
+            InStr( _
+                1, _
+                senderName, _
+                senderFilter, _
+                vbTextCompare) > 0 _
+            Or _
+            InStr( _
+                1, _
+                senderEmail, _
+                senderFilter, _
+                vbTextCompare) > 0
+
+    End If
+
+
+    ' ========================================================
+    ' Subject contains
+    ' ========================================================
+
+    If Trim(subjectFilter) = "" Then
+
+        subjectMatched = True
+
+    Else
+
+        subjectMatched = _
+            InStr( _
+                1, _
+                mail.Subject, _
+                subjectFilter, _
+                vbTextCompare) > 0
+
+    End If
+
+
+    If Not senderMatched Then Exit Function
+
+    If Not subjectMatched Then Exit Function
+
+
+    ' ========================================================
+    ' Start Date
+    ' ========================================================
+
+    If useFromDate Then
+
+        If mail.ReceivedTime < fromDate Then
+            Exit Function
+        End If
+
+    End If
+
+
+    ' ========================================================
+    ' End Date
+    ' ========================================================
+
+    If useToDate Then
+
+        If mail.ReceivedTime >= toDate Then
+            Exit Function
+        End If
+
+    End If
+
+
+    MailMatchesFilters = True
+
+End Function
+
+
+' ============================================================
+' SAVE ALL ATTACHMENTS FROM ONE EMAIL
+' ============================================================
+
+Private Sub SaveMailAttachments( _
+    ByVal mail As Outlook.MailItem, _
+    ByVal baseFolder As String, _
+    ByVal saveMode As VbMsgBoxResult, _
+    ByRef processedFiles As Long, _
+    ByRef savedFiles As Long, _
+    ByRef failedFiles As Long, _
+    ByVal totalAttachments As Long)
+
+
+    Dim objAttachment As Outlook.Attachment
+
+    Dim targetFolder As String
+    Dim emailFolderName As String
+
+    Dim fileName As String
+
+    Dim finalPath As String
+    Dim tempPath As String
+
+    Dim counter As Long
+
+    Dim saveSucceeded As Boolean
+
+
+    If mail.Attachments.Count = 0 Then
+        Exit Sub
+    End If
+
+
+    ' ========================================================
+    ' CREATE SEPARATE EMAIL FOLDER
+    ' ========================================================
+
+    If saveMode = vbNo Then
+
+        emailFolderName = _
+            Format( _
+                mail.ReceivedTime, _
+                "yyyy-mm-dd_hh-nn") & _
+            " - " & _
+            CleanFileName( _
+                GetSenderDisplayName(mail)) & _
+            " - " & _
+            CleanFileName(mail.Subject)
+
+
+        If Len(emailFolderName) > 120 Then
+
+            emailFolderName = _
+                Left( _
+                    emailFolderName, _
+                    120)
+
+        End If
+
+
+        targetFolder = _
+            GetUniqueFolderPath( _
+                baseFolder, _
+                emailFolderName)
+
+
+        If Not FolderExists(targetFolder) Then
+
+            On Error Resume Next
+
+            MkDir targetFolder
+
+
+            If Err.Number <> 0 Then
+
+                Err.Clear
+
+                On Error GoTo 0
+
+
+                failedFiles = _
+                    failedFiles + _
+                    mail.Attachments.Count
+
+
+                processedFiles = _
+                    processedFiles + _
+                    mail.Attachments.Count
+
+
+                UpdateProgressToolbar _
+                    processedFiles, _
+                    totalAttachments, _
+                    "Could not create destination folder"
+
+
+                Exit Sub
+
+            End If
+
+
+            On Error GoTo 0
+
+        End If
+
+
+        targetFolder = _
+            targetFolder & "\"
+
+    Else
+
+        targetFolder = baseFolder
+
+    End If
+
+
+    ' ========================================================
+    ' PROCESS ATTACHMENTS
+    ' ========================================================
+
+    For Each objAttachment In mail.Attachments
+
+
+        If EscapePressed() Then
+
+            gCancelled = True
+            Exit Sub
+
+        End If
+
+
+        fileName = _
+            CleanFileName( _
+                objAttachment.FileName)
+
+
+        fileName = _
+            LimitFileNameLength( _
+                targetFolder, _
+                fileName, _
+                MAX_PATH_LENGTH)
+
+
+        finalPath = _
+            targetFolder & _
+            fileName
+
+
+        counter = 1
+
+
+        ' ====================================================
+        ' DUPLICATE FILENAME PROTECTION
+        ' ====================================================
+
+        Do While FileExists(finalPath)
+
+            finalPath = _
+                targetFolder & _
+                GetFileNameWithoutExtension(fileName) & _
+                "_" & _
+                counter & _
+                GetFileExtension(fileName)
+
+
+            counter = counter + 1
+
+        Loop
+
+
+        ' ====================================================
+        ' TEMPORARY DOWNLOAD FILE
+        ' ====================================================
+
+        tempPath = _
+            GetTemporaryAttachmentPath( _
+                finalPath)
+
+
+        UpdateProgressToolbar _
+            processedFiles, _
+            totalAttachments, _
+            "Downloading: " & _
+            ShortDisplayName( _
+                fileName, _
+                55) & _
+            " (" & _
+            FormatBytes( _
+                CDbl(objAttachment.Size)) & _
+            ")"
+
+
+        ' ====================================================
+        ' SAVE ATTACHMENT
+        ' ====================================================
+
+        saveSucceeded = False
+
+
+        On Error Resume Next
+
+        Err.Clear
+
+
+        objAttachment.SaveAsFile tempPath
+
+
+        If Err.Number = 0 Then
+
+            If FileExists(tempPath) Then
+
+                Err.Clear
+
+
+                Name tempPath As finalPath
+
+
+                If Err.Number = 0 Then
+
+                    saveSucceeded = True
+
+                End If
+
+            End If
+
+        End If
+
+
+        ' ====================================================
+        ' RESULT
+        ' ====================================================
+
+        If saveSucceeded Then
+
+            savedFiles = _
+                savedFiles + 1
+
+        Else
+
+            failedFiles = _
+                failedFiles + 1
+
+
+            DeleteFileSafe tempPath
+
+        End If
+
+
+        Err.Clear
+
+        On Error GoTo 0
+
+
+        processedFiles = _
+            processedFiles + 1
+
+
+        UpdateProgressToolbar _
+            processedFiles, _
+            totalAttachments, _
+            "Downloaded: " & _
+            Format(savedFiles, "#,##0") & _
+            "   Failed: " & _
+            Format(failedFiles, "#,##0")
+
+
+        ' ====================================================
+        ' KEEP OUTLOOK RESPONSIVE
+        ' ====================================================
+
+        If processedFiles Mod _
+            UI_YIELD_INTERVAL = 0 Then
+
+            DoEvents
+
+        End If
+
+
+        If EscapePressed() Then
+
+            gCancelled = True
+            Exit Sub
+
+        End If
+
+    Next objAttachment
+
+End Sub
+
+
+' ============================================================
+' PROGRESS TOOLBAR
+' ============================================================
+
+Private Sub CreateProgressToolbar()
+
+    On Error Resume Next
+
+
+    DestroyProgressToolbar
+
+
+    Set gProgressBar = _
+        Application.ActiveExplorer.CommandBars.Add( _
+            Name:="AttachmentDownloadProgress", _
+            Position:=msoBarFloating, _
+            Temporary:=True)
+
+
+    If gProgressBar Is Nothing Then
+        Exit Sub
+    End If
+
+
+    Set gProgressStatus = _
+        gProgressBar.Controls.Add( _
+            Type:=msoControlButton)
+
+
+    Set gProgressCount = _
+        gProgressBar.Controls.Add( _
+            Type:=msoControlButton)
+
+
+    Set gProgressCancel = _
+        gProgressBar.Controls.Add( _
+            Type:=msoControlButton)
+
+
+    gProgressStatus.Caption = _
+        "Preparing..."
+
+
+    gProgressCount.Caption = _
+        "[------------------------] 0 / 0 - 0%"
+
+
+    gProgressCancel.Caption = _
+        "Press ESC to cancel"
+
+
+    gProgressStatus.Enabled = False
+
+    gProgressCount.Enabled = False
+
+    gProgressCancel.Enabled = False
+
+
+    gProgressBar.Visible = True
+
+
+    On Error GoTo 0
+
+End Sub
+
+
+Private Sub UpdateProgressToolbar( _
+    ByVal currentValue As Long, _
+    ByVal totalValue As Long, _
+    ByVal statusText As String)
+
+
+    Dim pct As Double
+
+    Dim filled As Long
+    Dim emptyCount As Long
+
+    Dim barText As String
+
+
+    If totalValue <= 0 Then
+
+        pct = 0
+
+    Else
+
+        pct = _
+            currentValue / totalValue
+
+    End If
+
+
+    If pct < 0 Then pct = 0
+
+    If pct > 1 Then pct = 1
+
+
+    filled = _
+        CLng(pct * PROGRESS_BAR_LENGTH)
+
+
+    If filled > PROGRESS_BAR_LENGTH Then
+
+        filled = PROGRESS_BAR_LENGTH
+
+    End If
+
+
+    emptyCount = _
+        PROGRESS_BAR_LENGTH - filled
+
+
+    barText = _
+        "[" & _
+        String(filled, "#") & _
+        String(emptyCount, "-") & _
+        "]"
+
+
+    On Error Resume Next
+
+
+    If Not gProgressStatus Is Nothing Then
+
+        gProgressStatus.Caption = _
+            statusText
+
+    End If
+
+
+    If Not gProgressCount Is Nothing Then
+
+        gProgressCount.Caption = _
+            barText & _
+            " " & _
+            Format(currentValue, "#,##0") & _
+            " / " & _
+            Format(totalValue, "#,##0") & _
+            " - " & _
+            Format(pct, "0%")
+
+    End If
+
+
+    If Not gProgressBar Is Nothing Then
+
+        gProgressBar.Visible = True
+
+    End If
+
+
+    On Error GoTo 0
+
+
+    DoEvents
+
+End Sub
+
+
+Private Sub DestroyProgressToolbar()
+
+    On Error Resume Next
+
+
+    If Not gProgressBar Is Nothing Then
+
+        gProgressBar.Delete
+
+    End If
+
+
+    Set gProgressCancel = Nothing
+
+    Set gProgressCount = Nothing
+
+    Set gProgressStatus = Nothing
+
+    Set gProgressBar = Nothing
+
+
+    On Error GoTo 0
+
+End Sub
+
+
+' ============================================================
+' ESC CANCELLATION
+' ============================================================
+
+Private Function EscapePressed() As Boolean
+
+    DoEvents
+
+
+    EscapePressed = _
+        ((GetAsyncKeyState(VK_ESCAPE) _
+        And &H8000) <> 0)
+
+End Function
+
+
+' ============================================================
+' GET SENDER EMAIL ADDRESS
+' ============================================================
+
+Private Function GetSenderEmail( _
+    ByVal mail As Outlook.MailItem) As String
+
+
+    Dim exchUser As Outlook.ExchangeUser
+
+    Dim senderObj As Outlook.AddressEntry
+
+
+    On Error Resume Next
+
+
+    If mail.SenderEmailType = "EX" Then
+
+        Set senderObj = _
+            mail.Sender
+
+
+        If Not senderObj Is Nothing Then
+
+            Set exchUser = _
+                senderObj.GetExchangeUser
+
+
+            If Not exchUser Is Nothing Then
+
+                GetSenderEmail = _
+                    exchUser.PrimarySmtpAddress
+
+            Else
+
+                GetSenderEmail = _
+                    mail.SenderEmailAddress
+
+            End If
+
+        Else
+
+            GetSenderEmail = _
+                mail.SenderEmailAddress
+
+        End If
+
+    Else
+
+        GetSenderEmail = _
+            mail.SenderEmailAddress
+
+    End If
+
+
+    On Error GoTo 0
+
+End Function
+
+
+' ============================================================
+' SENDER DISPLAY NAME
+' ============================================================
+
+Private Function GetSenderDisplayName( _
+    ByVal mail As Outlook.MailItem) As String
+
+
+    On Error Resume Next
+
+
+    If Trim(mail.SenderName) <> "" Then
+
+        GetSenderDisplayName = _
+            mail.SenderName
+
+    Else
+
+        GetSenderDisplayName = _
+            GetSenderEmail(mail)
+
+    End If
+
+
+    If Trim(GetSenderDisplayName) = "" Then
+
+        GetSenderDisplayName = _
+            "Unknown Sender"
+
+    End If
+
+
+    On Error GoTo 0
+
+End Function
+
+
+' ============================================================
+' CLEAN WINDOWS FILENAME
+' ============================================================
+
+Private Function CleanFileName( _
+    ByVal fileName As String) As String
+
+
+    Dim invalidChars As Variant
+
+    Dim ch As Variant
+
+
+    invalidChars = _
+        Array( _
+            "\", _
+            "/", _
+            ":", _
+            "*", _
+            "?", _
+            """", _
+            "<", _
+            ">", _
+            "|")
+
+
+    For Each ch In invalidChars
+
+        fileName = _
+            Replace( _
+                fileName, _
+                ch, _
+                "_")
+
+    Next ch
+
+
+    fileName = Trim(fileName)
+
+
+    Do While Len(fileName) > 0
+
+        If Right(fileName, 1) = "." _
+        Or Right(fileName, 1) = " " Then
+
+
+            fileName = _
+                Left( _
+                    fileName, _
+                    Len(fileName) - 1)
+
+        Else
+
+            Exit Do
+
+        End If
+
+    Loop
+
+
+    If fileName = "" Then
+
+        fileName = _
+            "Unnamed"
+
+    End If
+
+
+    CleanFileName = fileName
+
+End Function
+
+
+' ============================================================
+' FILE NAME WITHOUT EXTENSION
+' ============================================================
+
+Private Function GetFileNameWithoutExtension( _
+    ByVal fileName As String) As String
+
+
+    Dim p As Long
+
+
+    p = _
+        InStrRev( _
+            fileName, _
+            ".")
+
+
+    If p > 1 Then
+
+        GetFileNameWithoutExtension = _
+            Left( _
+                fileName, _
+                p - 1)
+
+    Else
+
+        GetFileNameWithoutExtension = _
+            fileName
+
+    End If
+
+End Function
+
+
+' ============================================================
+' FILE EXTENSION
+' ============================================================
+
+Private Function GetFileExtension( _
+    ByVal fileName As String) As String
+
+
+    Dim p As Long
+
+
+    p = _
+        InStrRev( _
+            fileName, _
+            ".")
+
+
+    If p > 1 Then
+
+        GetFileExtension = _
+            Mid( _
+                fileName, _
+                p)
+
+    Else
+
+        GetFileExtension = ""
+
+    End If
+
+End Function
+
+
+' ============================================================
+' FILE EXISTS
+' ============================================================
+
+Private Function FileExists( _
+    ByVal filePath As String) As Boolean
+
+
+    On Error Resume Next
+
+
+    FileExists = _
+        (Len( _
+            Dir( _
+                filePath, _
+                vbNormal Or _
+                vbHidden Or _
+                vbSystem Or _
+                vbReadOnly Or _
+                vbArchive)) > 0)
+
+
+    On Error GoTo 0
+
+End Function
+
+
+' ============================================================
+' FOLDER EXISTS
+' ============================================================
+
+Private Function FolderExists( _
+    ByVal folderPath As String) As Boolean
+
+
+    Dim attr As Long
+
+
+    On Error Resume Next
+
+
+    Err.Clear
+
+
+    attr = _
+        GetAttr(folderPath)
+
+
+    If Err.Number = 0 Then
+
+        FolderExists = _
+            ((attr And vbDirectory) = vbDirectory)
+
+    Else
+
+        FolderExists = False
+
+    End If
+
+
+    Err.Clear
+
+    On Error GoTo 0
+
+End Function
+
+
+' ============================================================
+' UNIQUE EMAIL FOLDER PATH
+' ============================================================
+
+Private Function GetUniqueFolderPath( _
+    ByVal baseFolder As String, _
+    ByVal folderName As String) As String
+
+
+    Dim folderPath As String
+
+    Dim counter As Long
+
+
+    folderPath = _
+        baseFolder & _
+        folderName
+
+
+    counter = 1
+
+
+    Do While FolderExists(folderPath)
+
+        folderPath = _
+            baseFolder & _
+            folderName & _
+            "_" & _
+            counter
+
+
+        counter = _
+            counter + 1
+
+    Loop
+
+
+    GetUniqueFolderPath = _
+        folderPath
+
+End Function
+
+
+' ============================================================
+' TEMPORARY FILE PATH
+' ============================================================
+
+Private Function GetTemporaryAttachmentPath( _
+    ByVal finalPath As String) As String
+
+
+    Dim tempPath As String
+
+    Dim counter As Long
+
+
+    tempPath = _
+        finalPath & _
+        ".downloading"
+
+
+    counter = 1
+
+
+    Do While FileExists(tempPath)
+
+        tempPath = _
+            finalPath & _
+            ".downloading_" & _
+            counter
+
+
+        counter = _
+            counter + 1
+
+    Loop
+
+
+    GetTemporaryAttachmentPath = _
+        tempPath
+
+End Function
+
+
+' ============================================================
+' SAFE DELETE
+' ============================================================
+
+Private Sub DeleteFileSafe( _
+    ByVal filePath As String)
+
+
+    On Error Resume Next
+
+
+    If FileExists(filePath) Then
+
+        Kill filePath
+
+    End If
+
+
+    Err.Clear
+
+    On Error GoTo 0
+
+End Sub
+
+
+' ============================================================
+' LIMIT FILE NAME / PATH LENGTH
+' ============================================================
+
+Private Function LimitFileNameLength( _
+    ByVal folderPath As String, _
+    ByVal fileName As String, _
+    ByVal maxFullPath As Long) As String
+
+
+    Dim extension As String
+
+    Dim baseName As String
+
+    Dim availableLength As Long
+
+
+    extension = _
+        GetFileExtension(fileName)
+
+
+    baseName = _
+        GetFileNameWithoutExtension(fileName)
+
+
+    availableLength = _
+        maxFullPath - _
+        Len(folderPath) - _
+        Len(extension)
+
+
+    If availableLength < 10 Then
+
+        availableLength = 10
+
+    End If
+
+
+    If Len(baseName) > availableLength Then
+
+        baseName = _
+            Left( _
+                baseName, _
+                availableLength)
+
+    End If
+
+
+    LimitFileNameLength = _
+        baseName & _
+        extension
+
+End Function
+
+
+' ============================================================
+' SHORT FILE NAME FOR UI
+' ============================================================
+
+Private Function ShortDisplayName( _
+    ByVal text As String, _
+    ByVal maxLength As Long) As String
+
+
+    If Len(text) <= maxLength Then
+
+        ShortDisplayName = text
+
+    Else
+
+        ShortDisplayName = _
+            Left( _
+                text, _
+                maxLength - 3) & _
+            "..."
+
+    End If
+
+End Function
+
+
+' ============================================================
+' FORMAT FILE SIZE
+' ============================================================
+
+Private Function FormatBytes( _
+    ByVal bytes As Double) As String
+
+
+    If bytes >= 1099511627776# Then
+
+        FormatBytes = _
+            Format( _
+                bytes / 1099511627776#, _
+                "0.00") & _
+            " TB"
+
+
+    ElseIf bytes >= 1073741824# Then
+
+        FormatBytes = _
+            Format( _
+                bytes / 1073741824#, _
+                "0.00") & _
+            " GB"
+
+
+    ElseIf bytes >= 1048576# Then
+
+        FormatBytes = _
+            Format( _
+                bytes / 1048576#, _
+                "0.00") & _
+            " MB"
+
+
+    ElseIf bytes >= 1024# Then
+
+        FormatBytes = _
+            Format( _
+                bytes / 1024#, _
+                "0.0") & _
+            " KB"
+
+
+    Else
+
+        FormatBytes = _
+            Format( _
+                bytes, _
+                "0") & _
+            " bytes"
+
+    End If
+
+End Function
+
+
+' ============================================================
+' DISK SPACE CHECK
+' ============================================================
+
+Private Function HasEnoughDiskSpace( _
+    ByVal folderPath As String, _
+    ByVal requiredBytes As Double) As Boolean
+
+
+    Dim fso As Object
+
+    Dim drv As Object
+
+    Dim driveLetter As String
+
+
+    On Error GoTo UnableToCheck
+
+
+    ' ========================================================
+    ' UNC / network folder
+    '
+    ' Free-space detection is not always reliable for UNC
+    ' paths, so do not block the download.
+    ' ========================================================
+
+    If Left(folderPath, 2) = "\\" Then
+
+        HasEnoughDiskSpace = True
+
+        Exit Function
+
+    End If
+
+
+    driveLetter = _
+        Left( _
+            folderPath, _
+            2)
+
+
+    Set fso = _
+        CreateObject( _
+            "Scripting.FileSystemObject")
+
+
+    Set drv = _
+        fso.GetDrive( _
+            driveLetter)
+
+
+    HasEnoughDiskSpace = _
+        CDbl(drv.FreeSpace) >= _
+        (requiredBytes * FREE_SPACE_MARGIN)
+
+
+    Exit Function
+
+
+UnableToCheck:
+
+    ' Do not block the job if free space cannot be determined.
+    HasEnoughDiskSpace = True
 
 End Function
