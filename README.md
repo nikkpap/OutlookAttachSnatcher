@@ -1,4 +1,4 @@
-# Outlook Bulk Attachment Downloader
+# OutlookAttachSnatcher (Outlook Bulk Attachment Downloader)
 
 A simple VBA macro for **Classic Microsoft Outlook for Windows** that allows you to download attachments from multiple selected emails at once.
 
