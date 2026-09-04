@@ -1,0 +1,170 @@
+Option Explicit
+
+Sub SaveAttachmentsFromSelectedEmails()
+
+    Dim objSelection As Outlook.Selection
+    Dim objItem As Object
+    Dim objAttachment As Outlook.Attachment
+
+    Dim baseFolder As String
+    Dim targetFolder As String
+    Dim filePath As String
+    Dim fileName As String
+
+    Dim shellApp As Object
+    Dim folderObj As Object
+
+    Dim answer As VbMsgBoxResult
+    Dim counter As Long
+    Dim savedFiles As Long
+    Dim emailFolderName As String
+
+    Set objSelection = Application.ActiveExplorer.Selection
+
+    If objSelection.Count = 0 Then
+        MsgBox "Den exeis epileksei email.", vbExclamation, "Attachments"
+        Exit Sub
+    End If
+
+    answer = MsgBox( _
+        "Theleis ola ta attachments se ENAN fakelo?" & vbCrLf & vbCrLf & _
+        "YES = Ola mazi se enan fakelo" & vbCrLf & _
+        "NO = Xehoristos fakelos gia kathe email" & vbCrLf & _
+        "CANCEL = Akyro", _
+        vbYesNoCancel + vbQuestion, _
+        "Tropos apothikefsis")
+
+    If answer = vbCancel Then Exit Sub
+
+    Set shellApp = CreateObject("Shell.Application")
+    Set folderObj = shellApp.BrowseForFolder(0, _
+        "Dialekse ton vasiko fakelo apothikefsis:", 0)
+
+    If folderObj Is Nothing Then Exit Sub
+
+    baseFolder = folderObj.Self.Path
+
+    If Right(baseFolder, 1) <> "\" Then
+        baseFolder = baseFolder & "\"
+    End If
+
+    savedFiles = 0
+
+    For Each objItem In objSelection
+
+        If TypeOf objItem Is Outlook.MailItem Then
+
+            If answer = vbNo Then
+
+                emailFolderName = Format(objItem.ReceivedTime, "yyyy-mm-dd_hh-nn") & _
+                                  " - " & CleanFileName(GetSenderName(objItem)) & _
+                                  " - " & CleanFileName(objItem.Subject)
+
+                If Len(emailFolderName) > 120 Then
+                    emailFolderName = Left(emailFolderName, 120)
+                End If
+
+                targetFolder = baseFolder & emailFolderName & "\"
+
+                If Dir(targetFolder, vbDirectory) = "" Then
+                    MkDir targetFolder
+                End If
+
+            Else
+                targetFolder = baseFolder
+            End If
+
+            For Each objAttachment In objItem.Attachments
+
+                fileName = CleanFileName(objAttachment.FileName)
+                filePath = targetFolder & fileName
+
+                counter = 1
+
+                Do While Dir(filePath) <> ""
+
+                    filePath = targetFolder & _
+                               GetFileNameWithoutExtension(fileName) & _
+                               "_" & counter & _
+                               GetFileExtension(fileName)
+
+                    counter = counter + 1
+
+                Loop
+
+                objAttachment.SaveAsFile filePath
+                savedFiles = savedFiles + 1
+
+            Next objAttachment
+
+        End If
+
+    Next objItem
+
+    MsgBox "Oloklirothike!" & vbCrLf & _
+           "Apothikeftikan " & savedFiles & " attachments.", _
+           vbInformation, _
+           "Attachments"
+
+End Sub
+
+
+Function CleanFileName(ByVal fileName As String) As String
+
+    Dim invalidChars As Variant
+    Dim ch As Variant
+
+    invalidChars = Array("\", "/", ":", "*", "?", """", "<", ">", "|")
+
+    For Each ch In invalidChars
+        fileName = Replace(fileName, ch, "_")
+    Next ch
+
+    CleanFileName = Trim(fileName)
+
+End Function
+
+
+Function GetFileNameWithoutExtension(ByVal fileName As String) As String
+
+    Dim p As Long
+
+    p = InStrRev(fileName, ".")
+
+    If p > 0 Then
+        GetFileNameWithoutExtension = Left(fileName, p - 1)
+    Else
+        GetFileNameWithoutExtension = fileName
+    End If
+
+End Function
+
+
+Function GetFileExtension(ByVal fileName As String) As String
+
+    Dim p As Long
+
+    p = InStrRev(fileName, ".")
+
+    If p > 0 Then
+        GetFileExtension = Mid(fileName, p)
+    Else
+        GetFileExtension = ""
+    End If
+
+End Function
+
+
+Function GetSenderName(ByVal mail As Outlook.MailItem) As String
+
+    On Error Resume Next
+
+    If Trim(mail.SenderName) <> "" Then
+        GetSenderName = mail.SenderName
+    Else
+        GetSenderName = "Unknown Sender"
+    End If
+
+    On Error GoTo 0
+
+End Function
